@@ -26,6 +26,8 @@ from OCC.Core.GeomAPI import GeomAPI_ProjectPointOnSurf
 from OCC.Core.GCPnts import GCPnts_UniformAbscissa
 from OCC.Core.Bnd import Bnd_Box
 from OCC.Core.BRepBndLib import brepbndlib_Add
+from OCC.Core.TopExp import TopExp_Explorer
+from OCC.Core.TopAbs import TopAbs_WIRE
 
 class BRepGraphExtractor:
     def __init__(self, step_file_path, n_samples_proximity=64):
@@ -151,6 +153,11 @@ class BRepGraphExtractor:
         face_features = {}
         face_types = np.zeros(num_faces, dtype=int)
         face_areas = np.zeros(num_faces)
+        face_loop_counts = np.zeros(num_faces, dtype=int)
+        # Inside extract_features(), before the face loop:
+        face_centroids = np.zeros((num_faces, 3))
+        face_convexity = np.zeros(num_faces, dtype=int)
+
 
         gprop = GProp_GProps()
         for i, face in enumerate(tqdm(self.faces, desc="Processing Faces")):
@@ -158,10 +165,45 @@ class BRepGraphExtractor:
             face_types[i] = adaptor.GetType()
             brepgprop_SurfaceProperties(face, gprop)
             face_areas[i] = gprop.Mass()
+            convex_edges = 0
+            concave_edges = 0
+            
+            for edge in self.topo_explorer.edges_from_face(face):
+                edge_hash = edge.HashCode(int(1e9))
+                if edge_hash in self.edge_map:
+                    edge_idx = self.edge_map[edge_hash]
+                    conv, _ = self._get_edge_convexity_and_angle(edge_idx)
+                    if conv == 0:
+                        convex_edges += 1
+                    elif conv == 1:
+                        concave_edges += 1
+                        
+            
+            if convex_edges > 0 and concave_edges == 0:
+                face_convexity[i] = 0
+            elif concave_edges > 0 and convex_edges == 0:
+                face_convexity[i] = 1
+            else:
+                face_convexity[i] = 2  # mixed or undefined
+
+            centroid_pnt = gprop.CentreOfMass()
+            face_centroids[i] = centroid_pnt.Coord()
+            exp = TopExp_Explorer(face, TopAbs_WIRE)
+            loop_count = 0
+            while exp.More():
+                loop_count += 1
+                exp.Next()
+            face_loop_counts[i] = loop_count
+
 
         face_features['type'] = face_types
         face_features['area'] = face_areas
         face_features['adj'] = np.array([len(list(fag.neighbors(i))) for i in range(num_faces)])
+        face_features['loops'] = face_loop_counts
+        face_features['centroid'] = face_centroids
+        face_features['convexity'] = face_convexity
+
+
 
         edge_features = {}
         edge_lens = np.zeros(num_edges)
