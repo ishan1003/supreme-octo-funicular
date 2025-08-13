@@ -20,6 +20,7 @@ from OCC.Core.TopLoc import TopLoc_Location
 from OCC.Core.STEPConstruct import stepconstruct_FindEntity
 from OCC.Core.TCollection import TCollection_HAsciiString
 import Utils.occ_utils as occ_utils
+from convert_step_to_graph import convert_step_to_graph
 import feature_creation
 
 from OCC.Core.Interface import Interface_Static_SetCVal
@@ -48,7 +49,12 @@ def shape_with_fid_to_step(filename, shape, id_map):
             continue
         item.SetName(TCollection_HAsciiString(str(id_map[face])))
 
-    writer.Write(filename)
+    step_path = Path(filename)               # <-- make it a Path
+    writer.Write(str(step_path))             # OCC wants a string path
+
+    pkl_path = step_path.with_suffix('.pkl') # same name, .pkl
+    # If your module exposes a function convert_step_to_graph(in_path, out_path):
+    convert_step_to_graph(str(step_path), str(pkl_path))
 
 # NEW: turn the TopoDS_Face->label map into an ordered list aligned with occ_utils.list_face(shape)
 def _per_face_labels(shape, label_map, missing_value=-1):
@@ -123,8 +129,8 @@ if __name__ == '__main__':
     # Parameters to be set before use
     shape_dir = 'data'
     num_features = 24
-    combo_range = [3, 10]
-    num_samples = 10
+    combo_range = [3, 5]
+    num_samples = 10000
 
     if not os.path.exists(shape_dir):
         os.mkdir(shape_dir)
@@ -135,7 +141,15 @@ if __name__ == '__main__':
 
     random.shuffle(combos)
     test_combos = combos[:num_samples]
-
+    import time, gc, sys
     for count, combo in enumerate(test_combos):
         print(f"{count}: {combo}")
-        generate_shape(shape_dir, combo, count)
+        t0 = time.time()
+        try:
+            generate_shape(shape_dir, combo, count)
+        except Exception as e:
+            print(f"[{count}] ERROR: {e}", flush=True)
+            continue
+        dt = time.time() - t0
+        print(f"[{count}] done in {dt:.2f}s", flush=True)
+        gc.collect()
