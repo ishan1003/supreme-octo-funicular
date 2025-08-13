@@ -1,17 +1,3 @@
-# MFCAD++ Dataset Generation
-This repo contains the scripts used to generate the MFCAD++ dataset for the [Hierarchical CADNet](https://www.sciencedirect.com/science/article/abs/pii/S0010448522000240) paper.
-
-The MFCAD++ dataset can be downloaded from here: https://pure.qub.ac.uk/en/datasets/mfcad-dataset-dataset-for-paper-hierarchical-cadnet-learning-from
-
-Unlike the MFCAD dataset which used Pickled Python lists saved as .face_truth files, the MFCAD++ dataset saved the class labels directly to the ADVANCED_FACES in the STEP files.
-
-<div align="center">
-  <img src="imgs/mfcad++_samples.jpg" alt="Image of samples from MFCAD++ dataset." width=75%>
-</div>
-
-## Requirements
-See the environment.yml file.
-
 ## Instructions
 - To generate a dataset of CAD models with different machining features run **main.py**.
 - In **main.py**, ```num_features``` parameter changes the number of feature classes to create feature sequences from.
@@ -49,19 +35,3 @@ of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 11703
 Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 12773–12782.
 
 [7] Gerico Vidanes, David Toal, Xu Zhang, Andy Keane, Jon Gregory, Marco Nunez, Extending Point-Based Deep Learning Approaches for Better Semantic Segmentation in CAD, Computer-Aided Design, Volume 166, 2024, 103629, https://doi.org/10.1016/j.cad.2023.103629.
-
-## Citation
-Please cite this work if used in your research:
-
-    @article{hierarchicalcadnet2022,
-      Author = {Andrew R. Colligan, Trevor. T. Robinson, Declan C. Nolan, Yang Hua, Weijuan Cao},
-      Journal = {Computer-Aided Design},
-      Title = {Hierarchical CADNet: Learning from B-Reps for Machining Feature Recognition},
-      Year = {2022}
-      Volume = {147}
-      URL = {https://www.sciencedirect.com/science/article/abs/pii/S0010448522000240}
-    }
-
-## Funding 
-This project was funded through DfE funding.
-
