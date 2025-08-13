@@ -8,6 +8,7 @@ import numpy as np
 import networkx as nx
 from tqdm import tqdm
 
+
 # --- pythonocc-core Imports ---
 from OCC.Core.STEPControl import STEPControl_Reader
 from OCC.Core.IFSelect import IFSelect_RetDone
@@ -275,26 +276,52 @@ class BRepGraphExtractor:
 
         print("\nFeature extraction complete.")
         return graph_data
+        
 
+def convert_step_to_graph(input_step: str, output_pkl: str):
+    """
+    Convert a B-rep STEP file to a graph representation and save it as a pickle file.
+
+    Args:
+        input_step (str): Path to the input STEP file.
+        output_pkl (str): Path to save the output graph pickle file.
+    """
+    print(f"Processing '{input_step}'...")
+    try:
+        extractor = BRepGraphExtractor(input_step)
+        graph_data = extractor.extract_features()
+
+        with open(output_pkl, 'wb') as f:
+            pickle.dump(graph_data, f)
+
+        print(f"\n✅ Success! Graph data saved to '{output_pkl}'")
+        print(f" -> Graph has {graph_data['num_nodes']} nodes (faces).")
+        print(f" -> Graph has {graph_data['edge_index'].shape[1]} edges.")
+        # Node features
+        face_features = graph_data.get('face_features')
+        if hasattr(face_features, 'shape'):
+            print(f" -> Node features shape: {face_features.shape}")
+        elif face_features is not None:
+            print(f" -> Node features count: {len(face_features)}")
+
+        # Edge features
+        edge_features = graph_data.get('brep_edge_features')
+        if hasattr(edge_features, 'shape'):
+            print(f" -> Edge features shape: {edge_features.shape}")
+        elif edge_features is not None:
+            print(f" -> Edge features count: {len(edge_features)}")
+
+    except Exception as e:
+        print(f"\n❌ An error occurred: {e}")
+        print("Please ensure the STEP file is valid and the environment is set up correctly.")
+
+
+# Keep CLI compatibility
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Convert a B-rep STEP file to a graph representation.")
     parser.add_argument("input_step", type=str, help="Path to the input STEP file.")
     parser.add_argument("output_pkl", type=str, help="Path to save the output graph data pickle file.")
     args = parser.parse_args()
 
-    print(f"Processing '{args.input_step}'...")
-    try:
-        extractor = BRepGraphExtractor(args.input_step)
-        graph_data = extractor.extract_features()
-
-        with open(args.output_pkl, 'wb') as f:
-            pickle.dump(graph_data, f)
-
-        print(f"\nSuccess! Graph data saved to '{args.output_pkl}'")
-        print(f" -> Graph has {graph_data['num_nodes']} nodes (faces).")
-        print(f" -> Graph has {graph_data['edge_index'].shape[1]} edges.")
-
-    except Exception as e:
-        print(f"\nAn error occurred: {e}")
-        print("Please ensure the STEP file is valid and the environment is set up correctly.")
+    convert_step_to_graph(args.input_step, args.output_pkl)
 
