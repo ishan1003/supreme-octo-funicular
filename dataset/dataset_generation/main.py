@@ -4,13 +4,8 @@ Used to generate dataset of stock cube with machining features applied to them.
 The number of machining features is defined by the combination range.
 To change the parameters of each machining feature, please see parameters.py
 """
-
-from multiprocessing import Pool
-from itertools import combinations_with_replacement
-import Utils.shape as shape
 import random
 import os
-import pickle
 import json            # NEW
 import csv             # NEW
 from pathlib import Path  # NEW
@@ -26,15 +21,27 @@ import feature_creation
 from OCC.Core.Interface import Interface_Static_SetCVal
 from OCC.Core.IFSelect import IFSelect_RetDone, IFSelect_ItemsByEntity
 
+import random
+from pathlib import Path
+
+import time, gc
+import multiprocessing as mp
+
+def _make_one(shape_dir, combo, count):
+    # resume-safe inside the worker too
+    step_path = Path(shape_dir) / f"{count}.step"
+    if step_path.exists():
+        return (count, "skip")
+
+    generate_shape(shape_dir, combo, count)
+    return (count, "ok")
+
+
+def random_combo(nfeat: int, k: int):
+    # nondecreasing tuple to mimic combinations_with_replacement
+    return tuple(sorted(random.choices(range(nfeat), k=k)))
 
 def shape_with_fid_to_step(filename, shape, id_map):
-    """Save shape to a STEP file format.
-
-    :param filename: Name to save shape as.
-    :param shape: Shape to be saved.
-    :param id_map: Variable mapping labels to faces in shape.
-    :return: None
-    """
     writer = STEPControl_Writer()
     writer.Transfer(shape, STEPControl_AsIs)
 
@@ -55,6 +62,8 @@ def shape_with_fid_to_step(filename, shape, id_map):
     pkl_path = step_path.with_suffix('.pkl') # same name, .pkl
     # If your module exposes a function convert_step_to_graph(in_path, out_path):
     convert_step_to_graph(str(step_path), str(pkl_path))
+    del finderp, faces, loc, writer
+
 
 # NEW: turn the TopoDS_Face->label map into an ordered list aligned with occ_utils.list_face(shape)
 def _per_face_labels(shape, label_map, missing_value=-1):
@@ -123,33 +132,47 @@ def generate_shape(shape_dir, combination, count):
 
     # NEW: Write labels sidecars
     save_labels(shape_dir, shape_name, combination, shape, label_map)
+    del shape, label_map
+    gc.collect()
 
 
-if __name__ == '__main__':
-    # Parameters to be set before use
-    shape_dir = 'data'
+if __name__ == "__main__":
+    shape_dir = "data"
     num_features = 24
-    combo_range = [3, 5]
-    num_samples = 10000
+    combo_range = [3, 5]   # k in [3,4]
+    num_samples = 30000
 
-    if not os.path.exists(shape_dir):
-        os.mkdir(shape_dir)
+    Path(shape_dir).mkdir(parents=True, exist_ok=True)
 
-    combos = []
-    for num_combo in range(combo_range[0], combo_range[1]):
-        combos += list(combinations_with_replacement(range(num_features), num_combo))
+    random.seed(42)
+    k_lo, k_hi = combo_range[0], combo_range[1] - 1
+    print(f"Streaming {num_samples} samples; k in [{k_lo}, {k_hi}]")
 
-    random.shuffle(combos)
-    test_combos = combos[:num_samples]
-    import time, gc, sys
-    for count, combo in enumerate(test_combos):
-        print(f"{count}: {combo}")
-        t0 = time.time()
-        try:
-            generate_shape(shape_dir, combo, count)
-        except Exception as e:
-            print(f"[{count}] ERROR: {e}", flush=True)
-            continue
-        dt = time.time() - t0
-        print(f"[{count}] done in {dt:.2f}s", flush=True)
+    ctx = mp.get_context("spawn")
+    # maxtasksperchild=1 keeps memory flat by restarting workers
+    with ctx.Pool(processes=max(1, os.cpu_count() - 1), maxtasksperchild=1000) as pool:
+        jobs = []
+        for count in range(num_samples):
+            # quick skip to avoid queuing already-done work
+            if (Path(shape_dir) / f"{count}.step").exists():
+                print(f"[{count}] exists, skip", flush=True)
+                continue
+
+            k = random.randint(k_lo, k_hi)
+            combo = random_combo(num_features, k)
+            print(f"[{count}] queue combo={combo}", flush=True)
+
+            jobs.append(pool.apply_async(_make_one, (shape_dir, combo, count)))
+
+        # collect results
+        for j in jobs:
+            try:
+                idx, status = j.get()  # no per-task timeout here; add if you really need it
+                if status == "ok":
+                    print(f"[{idx}] done", flush=True)
+                else:
+                    print(f"[{idx}] skipped (already existed)", flush=True)
+            except Exception as e:
+                print(f"[?] ERROR: {e}", flush=True)
         gc.collect()
+

@@ -1,4 +1,4 @@
-name: brep_env
+name: dataset_generation
 channels:
   - conda-forge
 dependencies:
