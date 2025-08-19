@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 from dataset_loader import build_node_features  # uses scalar "type" -> D=10
+import json, argparse
 
 NUM_CLASSES = 25
 FEAT_NAMES_DEFAULT = [
@@ -65,6 +66,7 @@ def main():
     ap.add_argument("--pkl", required=True, help="Path to graph pickle produced from STEP")
     ap.add_argument("--ckpt", default="checkpoints/gcn_facecls.pt")
     ap.add_argument("--device", default="auto", choices=["auto","cpu","cuda"])
+    ap.add_argument("--out_json", default=None)
     args = ap.parse_args()
 
     device = (torch.device("cuda") if (args.device=="auto" and torch.cuda.is_available())
@@ -73,6 +75,16 @@ def main():
     names, idxs = predict_from_pkl(Path(args.pkl), Path(args.ckpt), device)
     print(f"faces: {len(idxs)}")
     print(names[:30], "... (total {})".format(len(names)))
+
+    if args.out_json:
+        with open(args.out_json, "w") as f:
+            json.dump(
+                {"labels_idx": idxs,
+                "labels_name": names,
+                "num_faces": len(idxs)},
+                f, indent=2
+            )
+        print(f"wrote {args.out_json}")
 
 if __name__ == "__main__":
     main()
