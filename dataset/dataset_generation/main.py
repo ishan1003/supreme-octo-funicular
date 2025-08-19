@@ -140,7 +140,7 @@ if __name__ == "__main__":
     shape_dir = "data"
     num_features = 24
     combo_range = [3, 5]   # k in [3,4]
-    num_samples = 30000
+    num_samples = 50000
 
     Path(shape_dir).mkdir(parents=True, exist_ok=True)
 
