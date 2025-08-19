@@ -2,6 +2,7 @@ build/*
 dataset/dataset_download/*.zip
 dataset/dataset_download/MFCAD++_dataset/*
 dataset/dataset_generation/data/*
+checkpoints/*
 # Created by https://www.toptal.com/developers/gitignore/api/python,windows,linux,macos,visualstudio,visualstudiocode,c++,flask,node
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,windows,linux,macos,visualstudio,visualstudiocode,c++,flask,node
 *.step
