@@ -139,7 +139,7 @@ def generate_shape(shape_dir, combination, count):
 if __name__ == "__main__":
     shape_dir = "data"
     num_features = 24
-    combo_range = [3, 5]   # k in [3,4]
+    combo_range = [0, 5]   # k in [3,4]
     num_samples = 50000
 
     Path(shape_dir).mkdir(parents=True, exist_ok=True)
