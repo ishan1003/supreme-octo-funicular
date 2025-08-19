@@ -5,7 +5,7 @@
 import json
 from pathlib import Path
 import argparse
-
+from OCC.Core.TCollection import TCollection_ExtendedString as XStr
 from OCC.Core.STEPControl import STEPControl_Reader
 from OCC.Core.IFSelect import IFSelect_RetDone
 from OCC.Extend.TopologyUtils import TopologyExplorer
@@ -16,7 +16,8 @@ from OCC.Core.TCollection import TCollection_ExtendedString
 from OCC.Core.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_ColorSurf
 from OCC.Core.STEPCAFControl import STEPCAFControl_Writer
 from OCC.Core.Interface import Interface_Static
-
+from OCC.Core.TDataStd import TDataStd_Name
+from OCC.Core.TCollection import TCollection_ExtendedString as XStr
 from label_colors import LABEL_COLORS, hex_to_rgb01
 
 
@@ -61,11 +62,13 @@ def write_colored_step(input_step: str, labels_name: list[str], out_step: str):
         # Create / get a label for the subshape (face) and set SURF color
         sub_lbl = shape_tool.AddSubShape(root_lbl, face)
         color_tool.SetColor(sub_lbl, qcol, XCAFDoc_ColorSurf)
+        TDataStd_Name.Set(sub_lbl, XStr(f"{i:04d}_{name}"))
 
     # Write an AP214 STEP with colors
-    Interface_Static.SetCVal("write.step.schema", "AP214IS")
+    Interface_Static.SetCVal("write.step.schema", "AP242DIS")
     writer = STEPCAFControl_Writer()
     writer.SetColorMode(True)
+    writer.SetNameMode(True)
     ok = writer.Transfer(doc)
     if not ok:
         raise RuntimeError("STEPCAFControl: transfer failed")

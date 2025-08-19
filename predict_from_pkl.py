@@ -1,11 +1,13 @@
-# predict_from_pkl.py
+# predict_from_pkl.py  (DeepGCN-only)
 from pathlib import Path
-import argparse, pickle, numpy as np, torch
+import argparse, pickle, json
+import numpy as np
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
-from dataset_loader import build_node_features  # uses scalar "type" -> D=10
-import json, argparse
+from dataset_loader import build_node_features
+from collections import OrderedDict
 
 NUM_CLASSES = 25
 FEAT_NAMES_DEFAULT = [
@@ -17,30 +19,86 @@ FEAT_NAMES_DEFAULT = [
     'triangular_blind_step','circular_blind_step','rectangular_blind_step','round','stock'
 ]
 
-class GCN(nn.Module):
-    def __init__(self, in_dim, hidden=128, out_dim=NUM_CLASSES, dropout=0.2):
+# ----------------- Deep model -----------------
+class GCNBlock(nn.Module):
+    def __init__(self, in_ch, out_ch, p_drop=0.3):
         super().__init__()
-        self.c1 = GCNConv(in_dim, hidden)
-        self.c2 = GCNConv(hidden, hidden)
-        self.lin = nn.Linear(hidden, out_dim)
-        self.dropout = dropout
+        self.conv = GCNConv(in_ch, out_ch)
+        self.bn   = nn.BatchNorm1d(out_ch)
+        self.p    = p_drop
+        self.res  = (in_ch == out_ch)
     def forward(self, x, edge_index):
-        x = F.relu(self.c1(x, edge_index))
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        x = F.relu(self.c2(x, edge_index))
-        return self.lin(x)
+        out = self.conv(x, edge_index)
+        out = self.bn(out)
+        out = F.relu(out, inplace=True)
+        out = F.dropout(out, p=self.p, training=self.training)
+        if self.res:
+            out = out + x
+        return out
 
+class DeepGCN(nn.Module):
+    def __init__(self, in_dim, hidden=256, layers=4, out_dim=NUM_CLASSES, dropout=0.3):
+        super().__init__()
+        self.in_lin = nn.Linear(in_dim, hidden)
+        self.blocks = nn.ModuleList([GCNBlock(hidden, hidden, p_drop=dropout) for _ in range(int(layers))])
+        self.head = nn.Sequential(
+            nn.Linear(hidden, hidden),
+            nn.BatchNorm1d(hidden),
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout),
+            nn.Linear(hidden, out_dim),
+        )
+    def forward(self, x, edge_index):
+        x = F.relu(self.in_lin(x), inplace=True)
+        for blk in self.blocks:
+            x = blk(x, edge_index)
+        return self.head(x)
+
+# ----------------- Utils -----------------
+def _safe_torch_load(path: Path):
+    # Prefer weights_only=True to avoid the security warning (PyTorch >=2.4)
+    try:
+        return torch.load(path, map_location="cpu", weights_only=True)
+    except TypeError:
+        return torch.load(path, map_location="cpu")
+
+def _strip_prefix(state_dict, prefixes=("_orig_mod.", "module.")):
+    new_sd = OrderedDict()
+    for k, v in state_dict.items():
+        nk = k
+        for p in prefixes:
+            if nk.startswith(p):
+                nk = nk[len(p):]
+        new_sd[nk] = v
+    return new_sd
+
+# -------------- Loader -------------------
 def load_model(ckpt_path: Path, device: torch.device):
-    ckpt = torch.load(ckpt_path, map_location="cpu")
+    ckpt = _safe_torch_load(ckpt_path)
+    if "state_dict" not in ckpt:
+        raise RuntimeError("Checkpoint missing 'state_dict'.")
+
+    # Enforce DeepGCN-only
+    arch = ckpt.get("arch", None)
+    if arch not in (None, "DeepGCN"):
+        raise RuntimeError(f"This predictor only supports DeepGCN checkpoints. Found arch={arch!r}.")
+
     in_dim      = int(ckpt.get("in_dim", 10))
-    hidden      = int(ckpt.get("hidden", 128))
+    hidden      = int(ckpt.get("hidden", 256))   # sensible default for deep ckpt
+    layers      = int(ckpt.get("layers", 4))
     num_classes = int(ckpt.get("num_classes", NUM_CLASSES))
+    dropout     = float(ckpt.get("dropout", 0.3))
     feat_names  = ckpt.get("feat_names", FEAT_NAMES_DEFAULT)
-    model = GCN(in_dim, hidden=hidden, out_dim=num_classes).to(device)
-    model.load_state_dict(ckpt["state_dict"])
+
+    state = _strip_prefix(ckpt["state_dict"])  # handle torch.compile / DDP prefixes
+
+    model = DeepGCN(in_dim, hidden=hidden, layers=layers,
+                    out_dim=num_classes, dropout=dropout).to(device)
+    model.load_state_dict(state, strict=True)
     model.eval()
     return model, feat_names
 
+# -------------- Predict -------------------
 @torch.no_grad()
 def predict_from_pkl(pkl_path: Path, ckpt_path: Path, device: torch.device, use_amp=True):
     G = pickle.loads(Path(pkl_path).read_bytes())
@@ -61,6 +119,7 @@ def predict_from_pkl(pkl_path: Path, ckpt_path: Path, device: torch.device, use_
     idxs = logits.argmax(1).tolist()
     return [names[i] for i in idxs], idxs
 
+# -------------- CLI -------------------
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pkl", required=True, help="Path to graph pickle produced from STEP")
@@ -78,12 +137,7 @@ def main():
 
     if args.out_json:
         with open(args.out_json, "w") as f:
-            json.dump(
-                {"labels_idx": idxs,
-                "labels_name": names,
-                "num_faces": len(idxs)},
-                f, indent=2
-            )
+            json.dump({"labels_idx": idxs, "labels_name": names, "num_faces": len(idxs)}, f, indent=2)
         print(f"wrote {args.out_json}")
 
 if __name__ == "__main__":
