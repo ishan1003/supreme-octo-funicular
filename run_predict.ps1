@@ -1,3 +1,5 @@
+# run as: powershell -ExecutionPolicy Bypass -File .\run_predict.ps1 "D:\supreme-octo-funicular\dataset\dataset_generation\data\0.step"
+
 param(
   [Parameter(Mandatory = $false)]
   [string] $StepPath
