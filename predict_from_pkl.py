@@ -84,8 +84,8 @@ def load_model(ckpt_path: Path, device: torch.device):
         raise RuntimeError(f"This predictor only supports DeepGCN checkpoints. Found arch={arch!r}.")
 
     in_dim      = int(ckpt.get("in_dim", 10))
-    hidden      = int(ckpt.get("hidden", 256))   # sensible default for deep ckpt
-    layers      = int(ckpt.get("layers", 4))
+    hidden      = int(ckpt.get("hidden", 400))   # sensible default for deep ckpt
+    layers      = int(ckpt.get("layers", 6))
     num_classes = int(ckpt.get("num_classes", NUM_CLASSES))
     dropout     = float(ckpt.get("dropout", 0.3))
     feat_names  = ckpt.get("feat_names", FEAT_NAMES_DEFAULT)
